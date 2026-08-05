@@ -68,3 +68,12 @@ Infrastructure ────────┘
 - 新租户表必须在同一迁移中启用并强制 PostgreSQL RLS，测试跨租户不可见性。
 - 审计 Payload 禁止包含查询过滤值、返回行、Token、Secret 和未脱敏个人信息。
 - 新增或升级框架时同步维护 `pyproject.toml` 兼容区间和两个 requirements 固定版本文件。
+
+## 接入开发约束
+
+- Connector 不得持久化或返回 Secret 值，只能在连接生命周期内解析引用。
+- Schema 发现账号必须只读，禁止以数据库 Owner 或超级用户运行。
+- Worker Callback 必须提供完整 Manifest、Checkpoint、SHA-256 结果哈希和质量状态。
+- DatasetVersion、Serving Rows、活跃指针、Run 状态和 Outbox 必须在同一事务提交。
+- Outbox Relay 必须按 Tenant 执行，不得为了批量扫描绕过 RLS。
+- 回调、重试和 Publisher 消费者均需以稳定 ID 实现幂等。

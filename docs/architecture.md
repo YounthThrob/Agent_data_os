@@ -71,3 +71,19 @@ sequenceDiagram
 ```
 
 生产持久化由 Alembic 管理。应用账号不得拥有 `BYPASSRLS`；Repository 的显式租户条件用于纵深防御和测试可验证性。Outbox 当前是审计的可靠写入边界，Kafka Relay 与 WORM 归档在后续迭代实现。
+
+## Iteration 3 接入事务边界
+
+```text
+Worker Result Callback
+  └─ Tenant Transaction
+      ├─ lock IngestionRun
+      ├─ validate Manifest / content hash / quality gate
+      ├─ create immutable DatasetVersion
+      ├─ write ServingRows
+      ├─ switch Dataset.active_version_id
+      ├─ complete IngestionRun
+      └─ append DomainOutbox event
+```
+
+读取侧只访问 `PUBLISHED` Dataset 的 `active_version_id`，因此构建中的版本不会对 Agent 可见。接入事务失败时活跃版本指针保持不变；质量失败时 Run 进入隔离状态。

@@ -51,6 +51,21 @@ class DevelopmentIdentityResolver:
         except ValueError as exc:
             raise UnauthenticatedError("未知主体类型") from exc
 
+        scopes_by_actor = {
+            ActorType.AGENT: frozenset({"data_api:invoke"}),
+            ActorType.USER: frozenset(
+                {
+                    "datasource:create",
+                    "datasource:read",
+                    "datasource:test",
+                    "datasource:discover",
+                    "sync_job:create",
+                    "sync_job:execute",
+                    "sync_run:read",
+                }
+            ),
+            ActorType.SERVICE: frozenset({"ingestion:callback", "policy:decide"}),
+        }
         return SecurityContext(
             tenant_id=tenant_id,
             actor_type=actor_type,
@@ -58,7 +73,7 @@ class DevelopmentIdentityResolver:
             purpose=purpose,
             agent_version="dev-1.0" if actor_type is ActorType.AGENT else None,
             attributes={"region": region},
-            scopes=frozenset({"data_api:invoke"}),
+            scopes=scopes_by_actor[actor_type],
         )
 
 
@@ -68,4 +83,3 @@ def build_identity_resolver(settings: Settings) -> IdentityResolver:
     if settings.allow_insecure_dev_auth:
         return DevelopmentIdentityResolver(settings)
     return RejectingIdentityResolver()
-
