@@ -85,3 +85,18 @@ class AuditUnavailableError(AppError):
             503,
             True,
         )
+
+
+class InvalidStateTransitionError(AppError):
+    def __init__(self, message: str) -> None:
+        super().__init__("INVALID_STATE_TRANSITION", message, 409, False)
+
+
+class ConflictError(AppError):
+    def __init__(self, message: str) -> None:
+        super().__init__("CONFLICT", message, 409, False)
+
+
+class ConnectorUnavailableError(AppError):
+    def __init__(self, message: str = "data source connector is unavailable") -> None:
+        super().__init__("CONNECTOR_UNAVAILABLE", message, 503, True)

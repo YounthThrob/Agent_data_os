@@ -39,7 +39,7 @@ python -m alembic upgrade head
 
 Query API 在返回受保护数据前同步写入 `audit_outbox`。事件只保存主体、用途、资源、结果数量、数据/策略版本等证据元数据，不保存过滤值、查询结果、Token 或 Secret。写入失败返回 `AUDIT_CHANNEL_UNAVAILABLE`，不向调用者交付数据。
 
-Outbox 行以规范化 JSON 的 SHA-256 值提供完整性校验。当前迭代仅交付可靠落库边界；Kafka Relay 在后续迭代实现，届时按 `PENDING -> PUBLISHED` 状态机、行锁抢占、指数退避和幂等事件 ID 投递。
+Outbox 行以规范化 JSON 的 SHA-256 值提供完整性校验。Iteration 3 已实现租户级 Relay：按 `PENDING -> PUBLISHED` 状态机、`SKIP LOCKED` 行锁、指数退避和幂等事件 ID 投递。Kafka Publisher 与 WORM 归档仍由部署适配器提供。
 
 ## 版本基线
 

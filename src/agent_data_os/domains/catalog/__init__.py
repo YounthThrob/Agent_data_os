@@ -1,0 +1,1 @@
+"""Governed dataset catalog domain."""

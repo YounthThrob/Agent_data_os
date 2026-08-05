@@ -18,7 +18,7 @@ Agent Data API
 
 ## 项目状态
 
-项目处于 **V1.0开发阶段**。Iteration 2 已完成首个可持久化纵向切片：
+项目处于 **V1.0开发阶段**。Iteration 3 已完成结构化数据接入与 Serving 闭环：
 
 - FastAPI后端工程骨架。
 - 领域层、应用层、接口层和基础设施层分离。
@@ -35,8 +35,13 @@ Agent Data API
 - Repository 强制租户条件与 PostgreSQL RLS 双重隔离。
 - Query API 成功、拒绝和失败审计，以及 Transactional Outbox。
 - 生产数据库配置安全校验与版本固定的依赖清单。
+- PostgreSQL 数据源注册、只读连接测试和 Schema 发现端口。
+- SyncJob、幂等 IngestionRun、Checkpoint 与 Manifest 状态机。
+- Dataset/DatasetVersion 质量门禁及原子发布。
+- PostgreSQL Serving 只读查询适配器和不可变数据版本。
+- Audit/Domain Outbox 租户级至少一次投递 Relay。
 
-OIDC、业务数据 Serving Repository、数据接入 Worker、Outbox Kafka Relay、知识处理、Milvus、MinIO 和 DeepSeek 模型网关尚在后续迭代中。当前代码是领域行为与接口契约基线，不应直接用于生产环境。
+OIDC、Airflow/Connector Worker 运行时、企业 Secret Manager 实现、Kafka Publisher、知识处理、Milvus、MinIO 和 DeepSeek 模型网关尚在后续迭代中。当前代码是领域行为与接口契约基线，不应直接用于生产环境。
 
 ## 产品解决的问题
 
@@ -129,6 +134,8 @@ Agent_data_os/
 │  ├─ core/                   配置、身份、上下文、错误与中间件
 │  ├─ domains/
 │  │  ├─ data_service/        Query API领域模型与端口
+│  │  ├─ ingestion/           数据源、同步任务与运行状态机
+│  │  ├─ catalog/             Dataset与DatasetVersion
 │  │  └─ policy/              策略领域模型与决策服务
 │  ├─ infrastructure/         内存适配器与SQLAlchemy持久化适配器
 │  ├─ container.py            显式依赖组装
@@ -198,6 +205,8 @@ export ADOS_ALLOW_INSECURE_DEV_AUTH=true
 ```
 
 其他参数见 [`.env.example`](./.env.example)。项目当前不自动加载`.env`，配置由终端、IDE、容器或部署平台注入。
+
+Iteration 3 数据库、接入回调和 Outbox Worker 说明见 [`docs/iteration3-ingestion.md`](./docs/iteration3-ingestion.md)。
 
 ### 启动
 

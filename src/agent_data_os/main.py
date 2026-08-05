@@ -12,14 +12,18 @@ from agent_data_os.core.config import Settings, get_settings
 from agent_data_os.core.errors import AppError
 from agent_data_os.core.identity import build_identity_resolver
 from agent_data_os.core.middleware import RequestContextMiddleware
+from agent_data_os.infrastructure.connectors import SecretResolver
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    secret_resolver: SecretResolver | None = None,
+) -> FastAPI:
     """Create the application with explicit dependency composition."""
 
     settings = settings or get_settings()
     settings.validate()
-    container = build_container(settings)
+    container = build_container(settings, secret_resolver)
     identity_resolver = build_identity_resolver(settings)
 
     app = FastAPI(
@@ -81,4 +85,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
-

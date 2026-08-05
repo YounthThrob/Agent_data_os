@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import Engine
 
 from agent_data_os.application.query_service import QueryApplicationService
+from agent_data_os.application.ingestion_service import IngestionApplicationService
 from agent_data_os.core.config import Settings
 from agent_data_os.domains.data_service.models import QueryApiDefinition
 from agent_data_os.domains.policy.models import Grant
@@ -16,6 +17,13 @@ from agent_data_os.infrastructure.memory import (
     InMemoryPolicyRepository,
     InMemoryQueryApiRepository,
     InMemoryQueryDataPort,
+    InMemoryIngestionStore,
+)
+from agent_data_os.infrastructure.connectors import (
+    DevelopmentSchemaDiscovery,
+    RejectingSecretResolver,
+    SqlAlchemySchemaDiscovery,
+    SecretResolver,
 )
 from agent_data_os.infrastructure.persistence.database import (
     build_engine,
@@ -27,6 +35,11 @@ from agent_data_os.infrastructure.persistence.repositories import (
     SqlAlchemyPolicyRepository,
     SqlAlchemyQueryApiRepository,
 )
+from agent_data_os.infrastructure.persistence.ingestion import (
+    SqlAlchemyIngestionCommitter,
+    SqlAlchemyIngestionRepository,
+    SqlAlchemyServingQueryDataPort,
+)
 
 
 @dataclass(slots=True)
@@ -34,11 +47,14 @@ class Container:
     settings: Settings
     policy_service: PolicyEvaluator
     query_service: QueryApplicationService
+    ingestion_service: IngestionApplicationService
     audit_recorder: object
     engine: Engine | None = None
 
 
-def build_container(settings: Settings) -> Container:
+def build_container(
+    settings: Settings, secret_resolver: SecretResolver | None = None
+) -> Container:
     """Build V1.0 dependencies.
 
     Development fixtures are isolated here so replacing them with PostgreSQL and
@@ -128,16 +144,38 @@ def build_container(settings: Settings) -> Container:
         policy_repository = SqlAlchemyPolicyRepository(sessions)
         api_repository = SqlAlchemyQueryApiRepository(sessions)
         audit_recorder = SqlAlchemyAuditRecorder(sessions)
+        ingestion_repository = SqlAlchemyIngestionRepository(sessions)
+        ingestion_committer = SqlAlchemyIngestionCommitter(sessions)
+        data_port = SqlAlchemyServingQueryDataPort(sessions)
     else:
         policy_repository = InMemoryPolicyRepository(grants)
         api_repository = InMemoryQueryApiRepository(definitions)
         audit_recorder = InMemoryAuditRecorder()
+        ingestion_repository = InMemoryIngestionStore()
+        ingestion_committer = ingestion_repository
+        data_port = InMemoryQueryDataPort(datasets)
+
+    connector = (
+        DevelopmentSchemaDiscovery()
+        if settings.environment in {"development", "test"}
+        else SqlAlchemySchemaDiscovery(secret_resolver or RejectingSecretResolver())
+    )
+    ingestion_service = IngestionApplicationService(
+        ingestion_repository, connector, ingestion_committer
+    )
 
     policy_service = PolicyEvaluator(policy_repository, policy_version=1)
     query_service = QueryApplicationService(
         api_repository,
-        InMemoryQueryDataPort(datasets),
+        data_port,
         policy_service,
         audit_recorder,
     )
-    return Container(settings, policy_service, query_service, audit_recorder, engine)
+    return Container(
+        settings,
+        policy_service,
+        query_service,
+        ingestion_service,
+        audit_recorder,
+        engine,
+    )
