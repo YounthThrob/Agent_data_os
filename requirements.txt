@@ -1,0 +1,8 @@
+# Agent Data OS V1.0 runtime dependencies.
+# Versions are pinned to the Iteration 2 validated baseline.
+fastapi==0.109.0
+pydantic==2.13.0
+uvicorn[standard]==0.27.0.post1
+SQLAlchemy==2.0.51
+alembic==1.19.0
+psycopg[binary]==3.3.4

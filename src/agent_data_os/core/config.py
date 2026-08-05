@@ -27,6 +27,9 @@ class Settings:
     allow_insecure_dev_auth: bool = False
     default_query_limit: int = 20
     max_query_limit: int = 100
+    database_url: str | None = None
+    database_echo: bool = False
+    database_auto_create: bool = False
 
     def validate(self) -> None:
         """Fail startup when a dangerous configuration reaches production."""
@@ -34,6 +37,12 @@ class Settings:
         if self.environment == "production" and self.allow_insecure_dev_auth:
             raise RuntimeError(
                 "ADOS_ALLOW_INSECURE_DEV_AUTH must be false in production"
+            )
+        if self.environment == "production" and not self.database_url:
+            raise RuntimeError("ADOS_DATABASE_URL is required in production")
+        if self.environment == "production" and self.database_auto_create:
+            raise RuntimeError(
+                "ADOS_DATABASE_AUTO_CREATE must be false in production; use Alembic"
             )
         if self.default_query_limit < 1:
             raise RuntimeError("ADOS_DEFAULT_QUERY_LIMIT must be positive")
@@ -56,7 +65,11 @@ def get_settings() -> Settings:
         ),
         default_query_limit=int(os.getenv("ADOS_DEFAULT_QUERY_LIMIT", "20")),
         max_query_limit=int(os.getenv("ADOS_MAX_QUERY_LIMIT", "100")),
+        database_url=os.getenv("ADOS_DATABASE_URL") or None,
+        database_echo=_as_bool(os.getenv("ADOS_DATABASE_ECHO"), default=False),
+        database_auto_create=_as_bool(
+            os.getenv("ADOS_DATABASE_AUTO_CREATE"), default=False
+        ),
     )
     settings.validate()
     return settings
-

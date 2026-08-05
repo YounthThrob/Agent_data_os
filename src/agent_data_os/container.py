@@ -4,15 +4,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import Engine
+
 from agent_data_os.application.query_service import QueryApplicationService
 from agent_data_os.core.config import Settings
 from agent_data_os.domains.data_service.models import QueryApiDefinition
 from agent_data_os.domains.policy.models import Grant
 from agent_data_os.domains.policy.service import PolicyEvaluator
 from agent_data_os.infrastructure.memory import (
+    InMemoryAuditRecorder,
     InMemoryPolicyRepository,
     InMemoryQueryApiRepository,
     InMemoryQueryDataPort,
+)
+from agent_data_os.infrastructure.persistence.database import (
+    build_engine,
+    build_session_factory,
+    initialize_schema,
+)
+from agent_data_os.infrastructure.persistence.repositories import (
+    SqlAlchemyAuditRecorder,
+    SqlAlchemyPolicyRepository,
+    SqlAlchemyQueryApiRepository,
 )
 
 
@@ -21,6 +34,8 @@ class Container:
     settings: Settings
     policy_service: PolicyEvaluator
     query_service: QueryApplicationService
+    audit_recorder: object
+    engine: Engine | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -105,11 +120,24 @@ def build_container(settings: Settings) -> Container:
             )
         )
 
-    policy_service = PolicyEvaluator(InMemoryPolicyRepository(grants), policy_version=1)
+    engine: Engine | None = None
+    if settings.database_url:
+        engine = build_engine(settings)
+        initialize_schema(engine, settings)
+        sessions = build_session_factory(engine)
+        policy_repository = SqlAlchemyPolicyRepository(sessions)
+        api_repository = SqlAlchemyQueryApiRepository(sessions)
+        audit_recorder = SqlAlchemyAuditRecorder(sessions)
+    else:
+        policy_repository = InMemoryPolicyRepository(grants)
+        api_repository = InMemoryQueryApiRepository(definitions)
+        audit_recorder = InMemoryAuditRecorder()
+
+    policy_service = PolicyEvaluator(policy_repository, policy_version=1)
     query_service = QueryApplicationService(
-        InMemoryQueryApiRepository(definitions),
+        api_repository,
         InMemoryQueryDataPort(datasets),
         policy_service,
+        audit_recorder,
     )
-    return Container(settings, policy_service, query_service)
-
+    return Container(settings, policy_service, query_service, audit_recorder, engine)

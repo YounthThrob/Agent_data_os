@@ -11,3 +11,18 @@ def test_production_rejects_development_authentication() -> None:
     with pytest.raises(RuntimeError, match="must be false in production"):
         create_app(settings)
 
+
+def test_production_requires_database_url() -> None:
+    settings = Settings(environment="production")
+    with pytest.raises(RuntimeError, match="DATABASE_URL is required"):
+        create_app(settings)
+
+
+def test_production_rejects_automatic_schema_creation() -> None:
+    settings = Settings(
+        environment="production",
+        database_url="postgresql+psycopg://user:password@database/ados",
+        database_auto_create=True,
+    )
+    with pytest.raises(RuntimeError, match="AUTO_CREATE must be false"):
+        create_app(settings)

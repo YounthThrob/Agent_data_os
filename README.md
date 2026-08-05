@@ -18,7 +18,7 @@ Agent Data API
 
 ## 项目状态
 
-项目处于 **V1.0开发阶段**。当前已经完成首个可运行纵向切片：
+项目处于 **V1.0开发阶段**。Iteration 2 已完成首个可持久化纵向切片：
 
 - FastAPI后端工程骨架。
 - 领域层、应用层、接口层和基础设施层分离。
@@ -30,8 +30,13 @@ Agent Data API
 - 跨租户资源隐藏和生产环境安全配置校验。
 - 内部Policy Decision接口。
 - 开发/测试内存适配器、示例数据和自动化测试。
+- SQLAlchemy 2.0 PostgreSQL 元数据 Repository 与 Alembic 迁移。
+- Tenant、User、Agent、Policy、Grant、Data API 元数据表。
+- Repository 强制租户条件与 PostgreSQL RLS 双重隔离。
+- Query API 成功、拒绝和失败审计，以及 Transactional Outbox。
+- 生产数据库配置安全校验与版本固定的依赖清单。
 
-OIDC、PostgreSQL持久化、数据接入Worker、Kafka审计、知识处理、Milvus、MinIO和DeepSeek模型网关尚在后续迭代中。当前代码是领域行为与接口契约基线，不应直接用于生产环境。
+OIDC、业务数据 Serving Repository、数据接入 Worker、Outbox Kafka Relay、知识处理、Milvus、MinIO 和 DeepSeek 模型网关尚在后续迭代中。当前代码是领域行为与接口契约基线，不应直接用于生产环境。
 
 ## 产品解决的问题
 
@@ -125,15 +130,18 @@ Agent_data_os/
 │  ├─ domains/
 │  │  ├─ data_service/        Query API领域模型与端口
 │  │  └─ policy/              策略领域模型与决策服务
-│  ├─ infrastructure/         开发/测试内存适配器
+│  ├─ infrastructure/         内存适配器与SQLAlchemy持久化适配器
 │  ├─ container.py            显式依赖组装
 │  └─ main.py                 FastAPI应用工厂
 ├─ tests/                     接口、安全和配置测试
+├─ migrations/                Alembic数据库迁移与PostgreSQL RLS
 ├─ docs/                      架构、开发规范与实现状态
 ├─ Agent_Data_OS_PRD_SRS.md
 ├─ Agent_Data_OS_V1.0_Domain_Service_Design.md
 ├─ Agent_Data_OS_V1.0_API_Design.md
 ├─ pyproject.toml
+├─ requirements.txt           固定版本的运行时依赖
+├─ requirements-dev.txt       固定版本的开发/测试依赖
 └─ .env.example
 ```
 
@@ -151,7 +159,7 @@ Infrastructure ────────┘
 ### 环境要求
 
 - Python 3.10及以上；生产建议Python 3.12。
-- 当前切片无需PostgreSQL、Kafka和Milvus即可运行。
+- 默认内存模式无需外部基础设施；持久化模式需要 PostgreSQL 14 及以上。
 
 ### 安装
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from agent_data_os.domains.audit.models import AuditEvent
 from agent_data_os.domains.data_service.models import (
     OrderBy,
     QueryApiDefinition,
@@ -27,6 +28,16 @@ class InMemoryPolicyRepository:
             and grant.resource_id == request.resource.resource_id
             and grant.action == request.action
         ]
+
+
+class InMemoryAuditRecorder:
+    """Capture immutable audit events for local development and tests."""
+
+    def __init__(self) -> None:
+        self.events: list[AuditEvent] = []
+
+    def record(self, event: AuditEvent) -> None:
+        self.events.append(event)
 
 
 class InMemoryQueryApiRepository:
@@ -90,4 +101,3 @@ class InMemoryQueryDataPort:
             {field: row.get(field) for field in selected_fields}
             for row in rows[:limit]
         ]
-

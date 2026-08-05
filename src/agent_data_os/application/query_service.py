@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_data_os.core.context import RequestContext
 from agent_data_os.core.errors import (
+    AppError,
     FieldNotSelectableError,
     FilterNotAllowedError,
     InvalidArgumentError,
@@ -11,6 +12,8 @@ from agent_data_os.core.errors import (
     PolicyDeniedError,
     ResourceNotVisibleError,
 )
+from agent_data_os.domains.audit.models import AuditEvent
+from agent_data_os.domains.audit.ports import AuditRecorder
 from agent_data_os.domains.data_service.models import (
     QueryCommand,
     QueryFilter,
@@ -30,12 +33,51 @@ class QueryApplicationService:
         api_repository: QueryApiRepository,
         data_port: QueryDataPort,
         policy_port: PolicyDecisionPort,
+        audit_recorder: AuditRecorder,
     ) -> None:
         self._api_repository = api_repository
         self._data_port = data_port
         self._policy_port = policy_port
+        self._audit_recorder = audit_recorder
 
     def execute(self, context: RequestContext, command: QueryCommand) -> QueryResult:
+        """Execute and synchronously secure the audit delivery record."""
+
+        try:
+            result = self._execute(context, command)
+        except AppError as exc:
+            self._record_audit(
+                context,
+                command,
+                outcome="DENIED" if 400 <= exc.status_code < 500 else "FAILED",
+                error_code=exc.code,
+            )
+            raise
+        except Exception:
+            # Unexpected faults are still auditable, while the API exception
+            # handler remains responsible for returning a generic error body.
+            self._record_audit(
+                context,
+                command,
+                outcome="FAILED",
+                error_code="INTERNAL_ERROR",
+            )
+            raise
+        self._record_audit(
+            context,
+            command,
+            outcome="SUCCESS",
+            result_count=len(result.rows),
+            payload={
+                "dataset_version": result.dataset_version,
+                "policy_version": result.policy_version,
+                "selected_field_count": len(command.selected_fields),
+                "filter_count": len(command.filters),
+            },
+        )
+        return result
+
+    def _execute(self, context: RequestContext, command: QueryCommand) -> QueryResult:
         definition = self._api_repository.get_published(
             context.security.tenant_id, command.api_code
         )
@@ -124,3 +166,31 @@ class QueryApplicationService:
             truncated=truncated,
         )
 
+    def _record_audit(
+        self,
+        context: RequestContext,
+        command: QueryCommand,
+        *,
+        outcome: str,
+        error_code: str | None = None,
+        result_count: int | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        # Never record filter values or returned rows. Those values may contain
+        # credentials, personal data or commercially sensitive business facts.
+        self._audit_recorder.record(
+            AuditEvent.create(
+                tenant_id=context.security.tenant_id,
+                trace_id=context.trace_id,
+                actor_type=context.security.actor_type.value,
+                actor_id=context.security.actor_id,
+                action="QUERY_API_INVOKE",
+                resource_type="DATA_API_VERSION",
+                resource_id=f"{command.api_code}:{command.api_version}",
+                purpose=context.security.purpose,
+                outcome=outcome,
+                error_code=error_code,
+                result_count=result_count,
+                payload=payload,
+            )
+        )
