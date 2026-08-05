@@ -53,3 +53,21 @@ sequenceDiagram
 | `QueryDataPort` | 内存行集合 | 只读Serving PostgreSQL |
 | 审计 | 后续接口预留 | Outbox+Kafka+WORM |
 
+## Iteration 2 持久化与审计边界
+
+```mermaid
+sequenceDiagram
+    participant Q as QueryApplicationService
+    participant R as Tenant Repository
+    participant P as PostgreSQL RLS
+    participant O as Audit Outbox
+    Q->>R: tenant_id + logical API code
+    R->>P: transaction-local app.current_tenant
+    P-->>R: tenant-scoped metadata and grants
+    R-->>Q: API contract and policy decision
+    Q->>O: sanitized success/denied/failed event
+    O-->>Q: durable commit
+    Q-->>Q: return data only after audit commit
+```
+
+生产持久化由 Alembic 管理。应用账号不得拥有 `BYPASSRLS`；Repository 的显式租户条件用于纵深防御和测试可验证性。Outbox 当前是审计的可靠写入边界，Kafka Relay 与 WORM 归档在后续迭代实现。

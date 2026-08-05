@@ -74,3 +74,14 @@ class OrderNotAllowedError(AppError):
             [{"field": field_name}],
         )
 
+
+class AuditUnavailableError(AppError):
+    """Fail closed when an auditable data operation cannot be recorded."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "AUDIT_CHANNEL_UNAVAILABLE",
+            "审计通道暂时不可用，请稍后重试",
+            503,
+            True,
+        )

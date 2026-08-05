@@ -60,3 +60,11 @@ Infrastructure ────────┘
 - DataSource与同步任务领域。
 - Transactional Outbox及审计事件。
 
+## 数据库开发
+
+- ORM 使用 SQLAlchemy 2.0 typed mapping，禁止在应用服务中直接拼接 SQL。
+- 生产 Schema 变更必须新增 Alembic migration，不得调用 `create_all`。
+- 所有租户表 Repository 方法必须接收可信安全上下文派生的 `tenant_id` 并显式过滤。
+- 新租户表必须在同一迁移中启用并强制 PostgreSQL RLS，测试跨租户不可见性。
+- 审计 Payload 禁止包含查询过滤值、返回行、Token、Secret 和未脱敏个人信息。
+- 新增或升级框架时同步维护 `pyproject.toml` 兼容区间和两个 requirements 固定版本文件。
