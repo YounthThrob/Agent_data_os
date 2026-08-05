@@ -100,3 +100,34 @@ class ConflictError(AppError):
 class ConnectorUnavailableError(AppError):
     def __init__(self, message: str = "data source connector is unavailable") -> None:
         super().__init__("CONNECTOR_UNAVAILABLE", message, 503, True)
+
+
+class PromptInjectionBlockedError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "PROMPT_INJECTION_BLOCKED",
+            "request was blocked by the prompt-injection policy",
+            422,
+            False,
+        )
+
+
+class IndexVersionUnavailableError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "INDEX_VERSION_UNAVAILABLE", "active knowledge index is unavailable", 409
+        )
+
+
+class InsufficientEvidenceError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "INSUFFICIENT_EVIDENCE", "no sufficient authorized evidence was found", 422
+        )
+
+
+class FileSecurityBlockedError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "FILE_SECURITY_BLOCKED", "file failed security validation", 422, False
+        )

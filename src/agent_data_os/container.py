@@ -8,6 +8,7 @@ from sqlalchemy import Engine
 
 from agent_data_os.application.query_service import QueryApplicationService
 from agent_data_os.application.ingestion_service import IngestionApplicationService
+from agent_data_os.application.knowledge_service import KnowledgeApplicationService
 from agent_data_os.core.config import Settings
 from agent_data_os.domains.data_service.models import QueryApiDefinition
 from agent_data_os.domains.policy.models import Grant
@@ -40,6 +41,30 @@ from agent_data_os.infrastructure.persistence.ingestion import (
     SqlAlchemyIngestionRepository,
     SqlAlchemyServingQueryDataPort,
 )
+from agent_data_os.infrastructure.knowledge import (
+    BasicFileSecurityScanner,
+    DeterministicEmbedding,
+    DevelopmentDocumentParser,
+    DevelopmentGeneration,
+    InMemoryKnowledgeRepository,
+    InMemoryObjectStorage,
+    InMemoryVectorIndex,
+    UnavailableKnowledgeAdapter,
+)
+from agent_data_os.domains.knowledge.ports import (
+    DocumentParser,
+    EmbeddingPort,
+    FileSecurityScanner,
+    GenerationPort,
+    ObjectStoragePort,
+    VectorIndexPort,
+)
+from agent_data_os.infrastructure.persistence.knowledge import (
+    ContentCipher,
+    DevelopmentContentCipher,
+    RejectingContentCipher,
+    SqlAlchemyKnowledgeRepository,
+)
 
 
 @dataclass(slots=True)
@@ -48,12 +73,27 @@ class Container:
     policy_service: PolicyEvaluator
     query_service: QueryApplicationService
     ingestion_service: IngestionApplicationService
+    knowledge_service: KnowledgeApplicationService
     audit_recorder: object
+    object_storage: ObjectStoragePort
     engine: Engine | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class KnowledgeInfrastructure:
+    object_storage: ObjectStoragePort
+    scanner: FileSecurityScanner
+    parser: DocumentParser
+    embedding: EmbeddingPort
+    vector_index: VectorIndexPort
+    generation: GenerationPort
+
+
 def build_container(
-    settings: Settings, secret_resolver: SecretResolver | None = None
+    settings: Settings,
+    secret_resolver: SecretResolver | None = None,
+    knowledge_infrastructure: KnowledgeInfrastructure | None = None,
+    content_cipher: ContentCipher | None = None,
 ) -> Container:
     """Build V1.0 dependencies.
 
@@ -147,6 +187,12 @@ def build_container(
         ingestion_repository = SqlAlchemyIngestionRepository(sessions)
         ingestion_committer = SqlAlchemyIngestionCommitter(sessions)
         data_port = SqlAlchemyServingQueryDataPort(sessions)
+        cipher = content_cipher or (
+            DevelopmentContentCipher()
+            if settings.environment in {"development", "test"}
+            else RejectingContentCipher()
+        )
+        knowledge_repository = SqlAlchemyKnowledgeRepository(sessions, cipher)
     else:
         policy_repository = InMemoryPolicyRepository(grants)
         api_repository = InMemoryQueryApiRepository(definitions)
@@ -154,6 +200,7 @@ def build_container(
         ingestion_repository = InMemoryIngestionStore()
         ingestion_committer = ingestion_repository
         data_port = InMemoryQueryDataPort(datasets)
+        knowledge_repository = InMemoryKnowledgeRepository()
 
     connector = (
         DevelopmentSchemaDiscovery()
@@ -162,6 +209,36 @@ def build_container(
     )
     ingestion_service = IngestionApplicationService(
         ingestion_repository, connector, ingestion_committer
+    )
+    if knowledge_infrastructure is None:
+        if settings.environment in {"development", "test"}:
+            knowledge_infrastructure = KnowledgeInfrastructure(
+                object_storage=InMemoryObjectStorage(),
+                scanner=BasicFileSecurityScanner(),
+                parser=DevelopmentDocumentParser(),
+                embedding=DeterministicEmbedding(),
+                vector_index=InMemoryVectorIndex(),
+                generation=DevelopmentGeneration(),
+            )
+        else:
+            unavailable = UnavailableKnowledgeAdapter()
+            knowledge_infrastructure = KnowledgeInfrastructure(
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+            )
+    knowledge_service = KnowledgeApplicationService(
+        knowledge_repository,
+        knowledge_infrastructure.object_storage,
+        knowledge_infrastructure.scanner,
+        knowledge_infrastructure.parser,
+        knowledge_infrastructure.embedding,
+        knowledge_infrastructure.vector_index,
+        knowledge_infrastructure.generation,
+        audit_recorder,
     )
 
     policy_service = PolicyEvaluator(policy_repository, policy_version=1)
@@ -176,6 +253,8 @@ def build_container(
         policy_service,
         query_service,
         ingestion_service,
+        knowledge_service,
         audit_recorder,
+        knowledge_infrastructure.object_storage,
         engine,
     )

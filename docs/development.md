@@ -77,3 +77,13 @@ Infrastructure ────────┘
 - DatasetVersion、Serving Rows、活跃指针、Run 状态和 Outbox 必须在同一事务提交。
 - Outbox Relay 必须按 Tenant 执行，不得为了批量扫描绕过 RLS。
 - 回调、重试和 Publisher 消费者均需以稳定 ID 实现幂等。
+
+## 知识开发约束
+
+- API不得接受Bucket、Object Key、Milvus Collection、Embedding模型或系统Prompt。
+- 文件解析前必须完成大小、SHA-256和病毒扫描，失败文档进入隔离状态。
+- Chunk策略、Parser版本和Embedding模型版本必须写入IndexVersion。
+- 向量ACL过滤不能代替返回前当前权限复核。
+- Chunk正文不得以明文进入生产元数据库、向量库、日志或审计事件。
+- 召回内容按不可信数据处理，禁止拼接为System/Developer消息。
+- 权限撤销、文档撤销和索引切换必须立即影响后续检索。

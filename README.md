@@ -18,7 +18,7 @@ Agent Data API
 
 ## 项目状态
 
-项目处于 **V1.0开发阶段**。Iteration 3 已完成结构化数据接入与 Serving 闭环：
+项目处于 **V1.0开发阶段**。Iteration 4 已完成安全知识处理与检索闭环：
 
 - FastAPI后端工程骨架。
 - 领域层、应用层、接口层和基础设施层分离。
@@ -40,8 +40,14 @@ Agent Data API
 - Dataset/DatasetVersion 质量门禁及原子发布。
 - PostgreSQL Serving 只读查询适配器和不可变数据版本。
 - Audit/Domain Outbox 租户级至少一次投递 Relay。
+- 安全文件登记、对象引用、病毒扫描和哈希完整性验证。
+- DocumentVersion、固定 Chunk 策略和加密 Chunk 持久化。
+- Embedding Gateway、MinIO、Milvus 与 DeepSeek 生成适配器。
+- 蓝绿 IndexVersion 构建、验证、发布和旧版本退休。
+- Knowledge API、文档 ACL 双重过滤、引用和证据不足降级。
+- 查询与召回内容 Prompt Injection 防护和模型出站分级控制。
 
-OIDC、Airflow/Connector Worker 运行时、企业 Secret Manager 实现、Kafka Publisher、知识处理、Milvus、MinIO 和 DeepSeek 模型网关尚在后续迭代中。当前代码是领域行为与接口契约基线，不应直接用于生产环境。
+OIDC、Airflow/Worker 运行时、企业 Secret Manager/KMS 实现、Kafka Publisher、具体 PDF/Office/OCR 引擎和生产 Milvus Collection 初始化仍需部署适配。当前代码提供领域、安全与接口基线，不应在未配置生产适配器时直接上线。
 
 ## 产品解决的问题
 
@@ -136,6 +142,7 @@ Agent_data_os/
 │  │  ├─ data_service/        Query API领域模型与端口
 │  │  ├─ ingestion/           数据源、同步任务与运行状态机
 │  │  ├─ catalog/             Dataset与DatasetVersion
+│  │  ├─ knowledge/           文档、Chunk、索引与检索模型
 │  │  └─ policy/              策略领域模型与决策服务
 │  ├─ infrastructure/         内存适配器与SQLAlchemy持久化适配器
 │  ├─ container.py            显式依赖组装
@@ -185,7 +192,7 @@ Bash：
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ''.[dev]''
+python -m pip install -e ".[dev]"
 ```
 
 ### 开发配置
@@ -207,6 +214,10 @@ export ADOS_ALLOW_INSECURE_DEV_AUTH=true
 其他参数见 [`.env.example`](./.env.example)。项目当前不自动加载`.env`，配置由终端、IDE、容器或部署平台注入。
 
 Iteration 3 数据库、接入回调和 Outbox Worker 说明见 [`docs/iteration3-ingestion.md`](./docs/iteration3-ingestion.md)。
+
+Iteration 4 知识处理、安全检索和生产适配边界见 [`docs/iteration4-knowledge.md`](./docs/iteration4-knowledge.md)。
+
+从本地安装、PostgreSQL迁移、MinIO/Milvus/ClamAV初始化，到Docker、Kubernetes、密钥注入、验收、升级和回滚的完整步骤见 [`docs/installation-deployment.md`](./docs/installation-deployment.md)。
 
 ### 启动
 
@@ -330,6 +341,7 @@ Agent不得获得数据库、MinIO、Milvus或DeepSeek直连凭证。
 | [V1.0接口设计](./Agent_Data_OS_V1.0_API_Design.md) | 管理API、Agent Data API、内部API和Kafka事件契约 |
 | [代码架构](./docs/architecture.md) | 当前依赖方向、安全边界和适配器替换点 |
 | [开发规范](./docs/development.md) | 目录、领域功能开发步骤、注释和安全要求 |
+| [安装与部署手册](./docs/installation-deployment.md) | 开发安装、生产依赖、Docker/Kubernetes、验收、升级与回滚 |
 | [实现状态](./docs/implementation-status.md) | 已完成范围、验证结果、限制和下一迭代 |
 
 ## 开发路线

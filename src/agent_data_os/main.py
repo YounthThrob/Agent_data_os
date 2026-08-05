@@ -7,23 +7,31 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from agent_data_os.api.routes import router
-from agent_data_os.container import build_container
+from agent_data_os.container import KnowledgeInfrastructure, build_container
 from agent_data_os.core.config import Settings, get_settings
 from agent_data_os.core.errors import AppError
 from agent_data_os.core.identity import build_identity_resolver
 from agent_data_os.core.middleware import RequestContextMiddleware
 from agent_data_os.infrastructure.connectors import SecretResolver
+from agent_data_os.infrastructure.persistence.knowledge import ContentCipher
 
 
 def create_app(
     settings: Settings | None = None,
     secret_resolver: SecretResolver | None = None,
+    knowledge_infrastructure: KnowledgeInfrastructure | None = None,
+    content_cipher: ContentCipher | None = None,
 ) -> FastAPI:
     """Create the application with explicit dependency composition."""
 
     settings = settings or get_settings()
     settings.validate()
-    container = build_container(settings, secret_resolver)
+    container = build_container(
+        settings,
+        secret_resolver,
+        knowledge_infrastructure,
+        content_cipher,
+    )
     identity_resolver = build_identity_resolver(settings)
 
     app = FastAPI(

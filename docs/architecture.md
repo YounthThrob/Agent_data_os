@@ -87,3 +87,7 @@ Worker Result Callback
 ```
 
 读取侧只访问 `PUBLISHED` Dataset 的 `active_version_id`，因此构建中的版本不会对 Agent 可见。接入事务失败时活跃版本指针保持不变；质量失败时 Run 进入隔离状态。
+
+## Iteration 4 知识安全边界
+
+知识正文只存在于受控对象存储、解析 Worker 内存和加密 Chunk 存储；Milvus 与审计系统不保存正文。在线检索固定使用 `tenant_id + knowledge_base_id + active_index_version_id + acl_tokens` 过滤，随后以 PostgreSQL 当前 ACL 和 Document 状态进行二次授权。模型生成在确定性分类门禁之后执行，召回内容始终作为不可信数据封装。
