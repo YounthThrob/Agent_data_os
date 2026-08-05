@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request, Response
 
 from agent_data_os.api.dependencies import (
     get_policy_service,
     get_ingestion_service,
+    get_knowledge_service,
     get_query_service,
     get_request_context,
 )
@@ -16,8 +17,12 @@ from agent_data_os.api.schemas import (
     CreateSyncJobRequest,
     PolicyDecisionRequest,
     QueryRequest,
+    CreateFileUploadRequest,
+    CreateKnowledgeBaseRequest,
+    KnowledgeQueryRequest,
 )
 from agent_data_os.application.ingestion_service import IngestionApplicationService
+from agent_data_os.application.knowledge_service import KnowledgeApplicationService
 from agent_data_os.application.query_service import QueryApplicationService
 from agent_data_os.core.context import ActorType, RequestContext, SecurityContext
 from agent_data_os.domains.data_service.models import OrderBy, QueryCommand, QueryFilter
@@ -334,4 +339,158 @@ def _run_response(context: RequestContext, run: object) -> dict[str, object]:
             "dataset_version_id": run.dataset_version_id,
             "error_code": run.error_code,
         },
+    }
+
+
+@router.post("/api/v1/knowledge-bases", tags=["knowledge"], status_code=201)
+def create_knowledge_base(
+    payload: CreateKnowledgeBaseRequest,
+    context: RequestContext = Depends(get_request_context),
+    service: KnowledgeApplicationService = Depends(get_knowledge_service),
+) -> dict[str, object]:
+    _require_scope(context, "knowledge_base:create")
+    value = service.create_knowledge_base(
+        context,
+        code=payload.code,
+        name=payload.name,
+        owner_id=payload.owner_id,
+        allowed_purposes=frozenset(payload.allowed_purposes),
+        max_top_k=payload.max_top_k,
+        allow_generation=payload.allow_generation,
+    )
+    return {
+        "request_id": context.request_id,
+        "trace_id": context.trace_id,
+        "data": {"id": value.id, "code": value.code, "status": value.status.value},
+    }
+
+
+@router.post("/api/v1/files/uploads", tags=["knowledge"], status_code=201)
+def create_file_upload(
+    payload: CreateFileUploadRequest,
+    context: RequestContext = Depends(get_request_context),
+    service: KnowledgeApplicationService = Depends(get_knowledge_service),
+) -> dict[str, object]:
+    _require_scope(context, "file:upload")
+    document, version, upload_url = service.create_upload(
+        context,
+        knowledge_base_id=payload.knowledge_base_id,
+        file_name=payload.file_name,
+        size_bytes=payload.size_bytes,
+        mime_type=payload.mime_type,
+        sha256=payload.sha256,
+        classification=payload.classification,
+        acl_tokens=frozenset(payload.acl_tokens),
+    )
+    return {
+        "request_id": context.request_id,
+        "trace_id": context.trace_id,
+        "data": {
+            "document_id": document.id,
+            "document_version_id": version.id,
+            "upload_url": upload_url,
+            "expires_in_seconds": 900,
+        },
+    }
+
+
+@router.post(
+    "/internal/v1/knowledge/document-versions/{version_id}/process",
+    tags=["internal"],
+)
+def process_document_version(
+    version_id: str,
+    context: RequestContext = Depends(get_request_context),
+    service: KnowledgeApplicationService = Depends(get_knowledge_service),
+) -> dict[str, object]:
+    _require_scope(context, "knowledge:process")
+    index = service.process_document(context, version_id)
+    return {
+        "request_id": context.request_id,
+        "trace_id": context.trace_id,
+        "data": {
+            "index_version_id": index.id,
+            "version_number": index.version_number,
+            "status": index.status.value,
+            "chunk_count": index.chunk_count,
+        },
+    }
+
+
+@router.post(
+    "/api/v1/knowledge-bases/{kb_id}/indexes/{index_id}/publish",
+    tags=["knowledge"],
+)
+def publish_knowledge_index(
+    kb_id: str,
+    index_id: str,
+    context: RequestContext = Depends(get_request_context),
+    service: KnowledgeApplicationService = Depends(get_knowledge_service),
+) -> dict[str, object]:
+    _require_scope(context, "knowledge_index:publish")
+    kb = service.publish_index(context, kb_id, index_id)
+    return {
+        "request_id": context.request_id,
+        "trace_id": context.trace_id,
+        "data": {
+            "knowledge_base_id": kb.id,
+            "active_index_version_id": kb.active_index_version_id,
+            "version": kb.version,
+        },
+    }
+
+
+@router.post("/agent-data/v1/knowledge/{api_code}", tags=["agent-data"])
+def retrieve_knowledge(
+    api_code: str,
+    payload: KnowledgeQueryRequest,
+    response: Response,
+    context: RequestContext = Depends(get_request_context),
+    service: KnowledgeApplicationService = Depends(get_knowledge_service),
+) -> dict[str, object]:
+    _require_scope(context, "knowledge_api:invoke")
+    result = service.retrieve(
+        context,
+        api_code=api_code,
+        query=payload.query,
+        top_k=payload.top_k,
+        generate_answer=payload.generate_answer,
+        fail_on_insufficient_evidence=payload.fail_on_insufficient_evidence,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "request_id": context.request_id,
+        "trace_id": context.trace_id,
+        "data": {
+            "answer": result.answer,
+            "sufficient_evidence": result.sufficient_evidence,
+            "evidence": [
+                {
+                    "chunk_id": item.chunk_id,
+                    "document_id": item.document_id,
+                    "document_version_id": item.document_version_id,
+                    "title": item.title,
+                    "excerpt": item.excerpt,
+                    "score": item.score,
+                    "citation": {
+                        "page": item.page_number,
+                        "classification": item.classification,
+                    },
+                }
+                for item in result.evidence
+            ],
+        },
+        "retrieval": {
+            "knowledge_base_id": result.knowledge_base_id,
+            "index_version_id": result.index_version_id,
+            "candidate_count": result.candidate_count,
+            "authorized_count": result.authorized_count,
+            "returned_count": len(result.evidence),
+        },
+        "model": {"generated": result.generated},
+        "warnings": (
+            []
+            if result.sufficient_evidence
+            else [{"code": "INSUFFICIENT_EVIDENCE"}]
+        ),
     }

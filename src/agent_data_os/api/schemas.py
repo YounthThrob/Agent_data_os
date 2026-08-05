@@ -115,3 +115,29 @@ class CompleteIngestionRunRequest(StrictRequest):
         default_factory=list, alias="schema", max_length=1000
     )
     rows: list[dict[str, Any]] = Field(default_factory=list, max_length=10000)
+
+
+class CreateKnowledgeBaseRequest(StrictRequest):
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{2,99}$")
+    name: str = Field(min_length=1, max_length=200)
+    owner_id: str = Field(min_length=1, max_length=64)
+    allowed_purposes: list[str] = Field(min_length=1, max_length=50)
+    max_top_k: int = Field(default=8, ge=1, le=50)
+    allow_generation: bool = True
+
+
+class CreateFileUploadRequest(StrictRequest):
+    knowledge_base_id: str = Field(min_length=1, max_length=64)
+    file_name: str = Field(min_length=1, max_length=300)
+    size_bytes: int = Field(ge=1, le=104857600)
+    mime_type: str = Field(min_length=1, max_length=160)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    classification: Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL", "SECRET"]
+    acl_tokens: list[str] = Field(min_length=1, max_length=500)
+
+
+class KnowledgeQueryRequest(StrictRequest):
+    query: str = Field(min_length=1, max_length=4000)
+    top_k: int = Field(default=5, ge=1, le=50)
+    generate_answer: bool = True
+    fail_on_insufficient_evidence: bool = False

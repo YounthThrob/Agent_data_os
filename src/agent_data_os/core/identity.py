@@ -52,7 +52,9 @@ class DevelopmentIdentityResolver:
             raise UnauthenticatedError("未知主体类型") from exc
 
         scopes_by_actor = {
-            ActorType.AGENT: frozenset({"data_api:invoke"}),
+            ActorType.AGENT: frozenset(
+                {"data_api:invoke", "knowledge_api:invoke"}
+            ),
             ActorType.USER: frozenset(
                 {
                     "datasource:create",
@@ -62,9 +64,14 @@ class DevelopmentIdentityResolver:
                     "sync_job:create",
                     "sync_job:execute",
                     "sync_run:read",
+                    "knowledge_base:create",
+                    "knowledge_index:publish",
+                    "file:upload",
                 }
             ),
-            ActorType.SERVICE: frozenset({"ingestion:callback", "policy:decide"}),
+            ActorType.SERVICE: frozenset(
+                {"ingestion:callback", "knowledge:process", "policy:decide"}
+            ),
         }
         return SecurityContext(
             tenant_id=tenant_id,
