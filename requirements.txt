@@ -1,5 +1,5 @@
-# Agent Data OS V1.0 runtime dependencies.
-# Versions are pinned to the Iteration 2 validated baseline.
+# Agent Data OS V1.0 runtime, development and test dependencies.
+# This is the repository's single reproducible dependency baseline.
 fastapi==0.109.0
 pydantic==2.13.0
 uvicorn[standard]==0.27.0.post1
@@ -7,3 +7,5 @@ SQLAlchemy==2.0.51
 alembic==1.19.0
 psycopg[binary]==3.3.4
 httpx==0.28.1
+pytest==7.1.2
+pytest-cov==6.3.0
