@@ -40,7 +40,7 @@ Secrets: Vault/KMS/Secret Manager
 
 ### 3.1 软件版本
 
-Python 包的精确版本以仓库根目录 `requirements.txt` 和 `requirements-dev.txt` 为唯一来源。基础设施建议范围如下；正式交付时应在客户环境完成兼容性验证，并将容器镜像固定到不可变 digest。
+Python 包的精确版本以仓库根目录唯一的 `requirements.txt` 为准。基础设施建议范围如下；正式交付时应在客户环境完成兼容性验证，并将容器镜像固定到不可变 digest。
 
 | 组件 | 支持/建议基线 | 用途 |
 |---|---|---|
@@ -76,7 +76,7 @@ Set-Location Agent_data_os
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt
 python -m pip install --no-deps -e .
 ```
 
@@ -88,11 +88,11 @@ cd Agent_data_os
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt
 python -m pip install --no-deps -e .
 ```
 
-`requirements-dev.txt` 已包含运行时依赖。安装后执行：
+`requirements.txt` 已统一包含运行、开发与测试依赖。安装后执行：
 
 ```powershell
 python -m pytest --cov=agent_data_os --cov-report=term-missing

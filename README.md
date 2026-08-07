@@ -149,13 +149,14 @@ Agent_data_os/
 │  └─ main.py                 FastAPI应用工厂
 ├─ tests/                     接口、安全和配置测试
 ├─ migrations/                Alembic数据库迁移与PostgreSQL RLS
+├─ deploy/local/              PostgreSQL、MinIO、Milvus、ClamAV本地Compose栈
+├─ deploy/kubernetes/local/   kind本地集群与应用清单
 ├─ docs/                      架构、开发规范与实现状态
 ├─ Agent_Data_OS_PRD_SRS.md
 ├─ Agent_Data_OS_V1.0_Domain_Service_Design.md
 ├─ Agent_Data_OS_V1.0_API_Design.md
 ├─ pyproject.toml
-├─ requirements.txt           固定版本的运行时依赖
-├─ requirements-dev.txt       固定版本的开发/测试依赖
+├─ requirements.txt           固定版本的运行、开发与测试依赖
 └─ .env.example
 ```
 
@@ -173,45 +174,31 @@ Infrastructure ────────┘
 ### 环境要求
 
 - Python 3.10及以上；生产建议Python 3.12。
-- 默认内存模式无需外部基础设施；持久化模式需要 PostgreSQL 14 及以上。
+- Bash环境；Windows建议使用WSL2。
+- Docker Engine 24+与Docker Compose v2。
+- 完整本地基础设施建议至少4 CPU、16 GiB内存和30 GiB可用磁盘。
+- 默认内存模式无需外部基础设施；完整模式使用PostgreSQL、MinIO、Milvus和ClamAV。
 
 ### 安装
-
-PowerShell：
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-```
-
-Bash：
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -r requirements.txt
+python -m pip install --no-deps -e .
 ```
 
-### 开发配置
-
-PowerShell：
-
-```powershell
-$env:ADOS_ENVIRONMENT=''development''
-$env:ADOS_ALLOW_INSECURE_DEV_AUTH=''true''
-```
-
-Bash：
+### 最小化内存模式
 
 ```bash
 export ADOS_ENVIRONMENT=development
 export ADOS_ALLOW_INSECURE_DEV_AUTH=true
+export ADOS_DATABASE_AUTO_CREATE=false
+python -m uvicorn agent_data_os.main:app --app-dir src --reload
 ```
 
-其他参数见 [`.env.example`](./.env.example)。项目当前不自动加载`.env`，配置由终端、IDE、容器或部署平台注入。
+该模式用于快速验证API，数据随进程退出而丢失，不连接真实MinIO、Milvus或ClamAV。其他参数见 [`.env.example`](./.env.example)。项目不自动加载`.env`，配置由Shell、容器或部署平台注入。
 
 Iteration 3 数据库、接入回调和 Outbox Worker 说明见 [`docs/iteration3-ingestion.md`](./docs/iteration3-ingestion.md)。
 
@@ -219,18 +206,155 @@ Iteration 4 知识处理、安全检索和生产适配边界见 [`docs/iteration
 
 从本地安装、PostgreSQL迁移、MinIO/Milvus/ClamAV初始化，到Docker、Kubernetes、密钥注入、验收、升级和回滚的完整步骤见 [`docs/installation-deployment.md`](./docs/installation-deployment.md)。
 
-### 启动
-
-```powershell
-python -m uvicorn agent_data_os.main:app --app-dir src --reload
-```
-
 | 地址 | 用途 |
 |---|---|
 | `http://127.0.0.1:8000/docs` | Swagger UI |
 | `http://127.0.0.1:8000/openapi.json` | OpenAPI 3.1契约 |
 | `http://127.0.0.1:8000/health/live` | 存活检查 |
 | `http://127.0.0.1:8000/health/ready` | 就绪检查 |
+
+## 本地部署（新手推荐）
+
+本地开发采用“API在电脑上运行、基础设施在Docker Desktop运行”的方式：
+
+```mermaid
+flowchart LR
+    DEV["浏览器 / curl"] --> API["本地 Agent Data OS API<br/>127.0.0.1:8000"]
+    API --> PG["PostgreSQL<br/>5432"]
+    API --> MINIO["MinIO<br/>9000 / 9001"]
+    API --> MILVUS["Milvus<br/>19530"]
+    API --> CLAMAV["ClamAV<br/>3310"]
+    MILVUS --> ETCD["etcd"]
+
+    subgraph DOCKER["Docker Desktop"]
+        PG
+        MINIO
+        MILVUS
+        CLAMAV
+        ETCD
+    end
+```
+
+> Docker Desktop只部署PostgreSQL、MinIO、Milvus、etcd和ClamAV，不运行Agent Data OS API。
+
+### 第一步：启动Docker Desktop
+
+确认Docker Engine和Compose可用：
+
+```bash
+docker version
+docker compose version
+```
+
+建议为Docker Desktop分配至少8 GiB内存；资源不足时Milvus或ClamAV可能无法启动。
+
+### 第二步：启动基础设施
+
+在项目根目录执行：
+
+```bash
+docker compose --file deploy/local/docker-compose.yml up -d --wait
+docker compose --file deploy/local/docker-compose.yml ps --all
+```
+
+第一次启动会下载镜像并初始化ClamAV病毒库，通常需要几分钟。看到以下状态即为正常：
+
+- PostgreSQL、MinIO、Milvus、etcd和ClamAV为`healthy`。
+- `minio-init`为`Exited (0)`，表示Bucket初始化成功。
+
+### 第三步：迁移数据库
+
+```bash
+source .venv/bin/activate
+
+export ADOS_DATABASE_URL='postgresql+psycopg://agent_data_os:ados-local-change-me@127.0.0.1:5432/agent_data_os'
+export ADOS_DATABASE_AUTO_CREATE=false
+
+python -m alembic upgrade head
+python -m alembic current
+```
+
+### 第四步：启动本地API
+
+```bash
+export ADOS_ENVIRONMENT=development
+export ADOS_ALLOW_INSECURE_DEV_AUTH=true
+
+python -m uvicorn agent_data_os.main:app --app-dir src --reload
+```
+
+启动成功后打开：
+
+| 地址 | 用途 |
+|---|---|
+| `http://127.0.0.1:8000/docs` | Swagger接口调试 |
+| `http://127.0.0.1:8000/health/live` | API存活检查 |
+| `http://127.0.0.1:8000/health/ready` | API就绪检查 |
+| `http://127.0.0.1:9001` | MinIO管理界面 |
+
+MinIO本地登录信息：用户名`adosminio`，密码`ados-local-minio-change-me`。这些凭据只允许本地开发使用。
+
+### 第五步：验证部署
+
+```bash
+curl --fail http://127.0.0.1:8000/health/live
+curl --fail http://127.0.0.1:8000/health/ready
+curl --fail http://127.0.0.1:9000/minio/health/live
+curl --fail http://127.0.0.1:9091/healthz
+```
+
+```mermaid
+flowchart TD
+    A["启动Docker Desktop"] --> B["docker compose up"]
+    B --> C{"所有基础设施 healthy?"}
+    C -- "否" --> D["查看 docker compose logs"]
+    D --> C
+    C -- "是" --> E["alembic upgrade head"]
+    E --> F["本地启动 uvicorn"]
+    F --> G["访问 /docs 和健康检查"]
+```
+
+### 停止与重新启动
+
+停止基础设施但保留数据：
+
+```bash
+docker compose --file deploy/local/docker-compose.yml stop
+```
+
+重新启动：
+
+```bash
+docker compose --file deploy/local/docker-compose.yml start
+```
+
+### 常见问题
+
+| 现象 | 新手处理方式 |
+|---|---|
+| `docker`命令无法连接 | 打开Docker Desktop，等待左下角显示Engine Running |
+| Milvus或ClamAV不健康 | 将Docker Desktop内存提高到8 GiB以上后重启 |
+| 端口被占用 | 关闭占用`5432/8000/9000/9001/19530`的程序 |
+| API提示数据库连接失败 | 确认PostgreSQL为`healthy`并重新设置`ADOS_DATABASE_URL` |
+| 想查看容器错误 | 执行`docker compose --file deploy/local/docker-compose.yml logs --tail=200` |
+
+更详细的组件初始化、安全配置、备份、升级、Kubernetes和生产部署流程见[安装与部署手册](./docs/installation-deployment.md)。新手首次运行不需要部署Kubernetes。
+
+## 知识处理流程
+
+```mermaid
+flowchart LR
+    FILE["PDF / Word / Excel / 图片"] --> UPLOAD["安全上传"]
+    UPLOAD --> SCAN["ClamAV扫描"]
+    SCAN --> PARSE["解析与OCR"]
+    PARSE --> CHUNK["Chunk切分"]
+    CHUNK --> EMB["Embedding"]
+    EMB --> VECTOR["Milvus索引"]
+    VECTOR --> RETRIEVE["Agent权限检索"]
+    RETRIEVE --> ANSWER["回答 + 引用"]
+```
+
+每一步都保留租户、文档版本、权限和审计信息。Agent不能绕过Data API直接访问数据库、MinIO或Milvus。
 
 ## Query API示例
 
@@ -244,26 +368,20 @@ dev.<tenant_id>.<actor_type>.<actor_id>.<region>
 
 该Token没有密码学签名，只允许本地开发和测试使用。生产环境检测到开发认证开关会拒绝启动。
 
-```powershell
-$headers = @{
-  Authorization = ''Bearer dev.tenant_001.AGENT.sales_risk_agent.EAST''
-  ''X-Purpose'' = ''sales_risk_followup''
-}
-
-$body = @{
-  api_version = ''1.0.0''
-  select = @(''customer_name'', ''region'', ''overdue_amount'', ''currency'')
-  filters = @(@{field=''overdue_days''; op=''gte''; value=30})
-  order_by = @(@{field=''overdue_amount''; direction=''desc''})
-  limit = 20
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri ''http://127.0.0.1:8000/agent-data/v1/query/customer_receivable_query'' `
-  -Headers $headers `
-  -ContentType ''application/json'' `
-  -Body $body
+```bash
+curl --fail-with-body \
+  --request POST \
+  --url http://127.0.0.1:8000/agent-data/v1/query/customer_receivable_query \
+  --header 'Authorization: Bearer dev.tenant_001.AGENT.sales_risk_agent.EAST' \
+  --header 'X-Purpose: sales_risk_followup' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "api_version": "1.0.0",
+    "select": ["customer_name", "region", "overdue_amount", "currency"],
+    "filters": [{"field": "overdue_days", "op": "gte", "value": 30}],
+    "order_by": [{"field": "overdue_amount", "direction": "desc"}],
+    "limit": 20
+  }'
 ```
 
 响应包含：
@@ -291,7 +409,7 @@ Invoke-RestMethod `
 
 ## 测试与验证
 
-```powershell
+```bash
 python -m pytest -q
 python -m compileall -q src
 ```

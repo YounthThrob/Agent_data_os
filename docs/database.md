@@ -43,12 +43,13 @@ Outbox 行以规范化 JSON 的 SHA-256 值提供完整性校验。Iteration 3 �
 
 ## 版本基线
 
-运行时精确版本维护在 `requirements.txt`，开发与测试依赖维护在 `requirements-dev.txt`。`pyproject.toml` 保留兼容版本区间，便于包管理器解析安全补丁；正式构建以固定版本文件作为可复现基线。
+运行、开发与测试依赖的精确版本统一维护在 `requirements.txt`。`pyproject.toml` 保留运行时兼容版本区间，便于包管理器解析安全补丁；正式构建以唯一固定版本文件作为可复现基线。
 
 ## 验证命令
 
-```powershell
-python -m pip install -r requirements-dev.txt
+```bash
+python -m pip install -r requirements.txt
+python -m pip install --no-deps -e .
 python -m pytest
 python -m compileall -q src migrations
 python -m alembic upgrade head

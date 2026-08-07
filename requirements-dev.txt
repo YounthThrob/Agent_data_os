@@ -1,5 +1,0 @@
--r requirements.txt
-
-# Development and contract/integration testing dependencies.
-pytest==7.1.2
-pytest-cov==6.3.0
